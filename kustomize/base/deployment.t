@@ -1,6 +1,6 @@
 # 01.spring-backend-v1.0 Deployment
 # - REST API 서버(Spring Boot)를 k8s에 배포하기 위한 정의
-# - image 값은 docker-push.sh로 올린 이미지 주소로 바꿔서 사용한다.
+# - {{}}로 표시된 값은 배포 시 실제 값으로 치환한다 (k8s/*.t와 동일한 방식).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -8,54 +8,45 @@ metadata:
     prometheus.io/scrape: 'true'
     prometheus.io/port: '8080'
     prometheus.io/path: '/actuator/prometheus'
-    update: 5b324a21
-  name: sk075-myfirst-api-server
-  namespace: class-3
+    update: {{HASHCODE}}
+  name: {{USER_NAME}}-{{SERVICE_NAME}}
+  namespace: {{NAMESPACE}}
+  labels:
+    app: {{USER_NAME}}-{{SERVICE_NAME}}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: sk075-myfirst-api-server
+      app: {{USER_NAME}}-{{SERVICE_NAME}}
   template:
     metadata:
       labels:
-        app: sk075-myfirst-api-server
+        app: {{USER_NAME}}-{{SERVICE_NAME}}
     spec:
       # SIGTERM 전달 후 강제 종료(SIGKILL)까지 대기하는 최대 시간
       terminationGracePeriodSeconds: 20
       containers:
-        - name: myfirst-api-server
-          image: skala-registry.skala-ai.com/class-3/sk075-webserver:1.0
+        - name: {{SERVICE_NAME}}
+          image: {{DOCKER_REGISTRY}}/{{PROJECT_NAME}}/{{USER_NAME}}-webserver:1.0
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
-          env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "local"
-          lifecycle:
-            preStop:
-              # Service 엔드포인트에서 빠질 시간을 확보한 뒤 SIGTERM 전달
-              exec:
-                command: ["sh", "-c", "sleep 5"]
+          # SPRING_PROFILES_ACTIVE는 dev/prod overlay의 patch-deployment.yaml에서 설정한다.
           # 준비(readiness)가 끝나기 전에는 Service가 트래픽을 보내지 않는다.
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
               port: 8080
-            initialDelaySeconds: 10
+            initialDelaySeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 5
             periodSeconds: 10
           # 살아있는지(liveness) 계속 실패하면 컨테이너를 재시작한다.
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
               port: 8080
-            initialDelaySeconds: 20
+            initialDelaySeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 5
             periodSeconds: 10
-          # ---- createcm.sh로 만든 ConfigMap(application-prod.yaml)을 마운트하려면 아래 주석을 해제한다. ----
-          # volumeMounts:
-          #   - name: config-volume
-          #     mountPath: /app/config
-      # volumes:
-      #   - name: config-volume
-      #     configMap:
-      #       name: sk075-backend-configmap
